@@ -3,60 +3,61 @@ import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters.command import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram import Router
+from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token='8377828328:AAE5OIlE_577ysb5-ha0DNjdSTyk4J3GvhU')
 dp = Dispatcher()
+router = Router()
+dp.include_router(router)
 
-@dp.message(Command("start"))
+@router.message(Command("start"))
 async def cmd_start(message: types.Message):
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Telegram Gifts", callback_data="gifts")]
-        ]
-    )
-    await message.answer("Добро пожаловать в Telegram NFT Gifts. \nНаш бот для поиска подарков:", reply_markup=keyboard)
+    keyboard = InlineKeyboardBuilder()
+    keyboard.add(InlineKeyboardButton(text="Telegram Gifts", callback_data="gifts"))
 
-@dp.callback_query(lambda c: c.data == "gifts")
+    await message.answer(
+        "Добро пожаловать в Telegram NFT Gifts. \nНаш бот для поиска подарков:",
+        reply_markup=keyboard.as_markup()
+    )
+
+@router.callback_query(lambda c: c.data == "gifts")
 async def gifts_callback(callback_query: types.CallbackQuery):
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Поиск подарка", callback_data="search")],
-            [InlineKeyboardButton(text="Купить запросы", callback_data="byu_request")],
-            [InlineKeyboardButton(text="Назад", callback_data="back")],
-        ]
-    )
+    keyboard = InlineKeyboardBuilder()
+    keyboard.row(InlineKeyboardButton(text="Поиск подарков", callback_data="search"))
+    keyboard.row(InlineKeyboardButton(text="Купить запрос", callback_data="buy_request"))
+    keyboard.row(InlineKeyboardButton(text="Назад", callback_data="back"))
 
     await callback_query.message.edit_text(
         "Какой-то текст, хз",
-        reply_markup=keyboard
+        reply_markup=keyboard.as_markup()
     )
 
-@dp.callback_query(lambda c: c.data in ["byu_request", "back"])
+@router.callback_query(lambda c: c.data in ["byu_request", "back"])
 async def process_callback(callback_query: types.CallbackQuery):
     await callback_query.answer(callback_query.data)
 
-@dp.callback_query(lambda c: c.data == "search")
+@router.callback_query(lambda c: c.data == "search")
 async def search_callback(callback_query: types.CallbackQuery):
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Сохраненный запрос", callback_data="saved_request1")],
-            [InlineKeyboardButton(text="Сохраненный запрос", callback_data="saved_request2")],
-            [InlineKeyboardButton(text="Сохраненный запрос", callback_data="saved_request3")],
-            [InlineKeyboardButton(text="Пагинация", callback_data="pagination")],
-            [InlineKeyboardButton(text="Новый запрос", callback_data="new_request")],
-            [InlineKeyboardButton(text="Назад", callback_data="back")],
-        ]
-    )
+
+    keyboard = InlineKeyboardBuilder()
+    keyboard.row(InlineKeyboardButton(text="Сохраненный запрос", callback_data="saved_request1"))
+    keyboard.row(InlineKeyboardButton(text="Сохраненный запрос", callback_data="saved_request2"))
+    keyboard.row(InlineKeyboardButton(text="Сохраненный запрос", callback_data="saved_request3"))
+    keyboard.row(InlineKeyboardButton(text="Пагинация", callback_data="pagination"))
+    keyboard.row(InlineKeyboardButton(text="Новый запрос", callback_data="new_request"))
+    keyboard.row(InlineKeyboardButton(text="Назад", callback_data="back"))
 
     await callback_query.message.edit_text(
         "Ниже вы увидите свои сохраненные запросы",
-        reply_markup=keyboard
+        reply_markup=keyboard.as_markup()
     )
 
-@dp.callback_query(lambda c: c.data in ["saved_request1", "saved_request2", "saved_request3",
+@router.callback_query(lambda c: c.data in ["saved_request1", "saved_request2", "saved_request3",
                                         "pagination", "new_request", "back"])
 async def search_process_callback(callback_query: types.CallbackQuery):
     await callback_query.answer(callback_query.data)
