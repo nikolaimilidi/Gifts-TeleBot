@@ -4,7 +4,7 @@ import aiohttp
 import logging
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, StateFilter
-from aiogram.types import InlineKeyboardButton
+from aiogram.types import InlineKeyboardButton, ReplyKeyboardRemove
 from aiogram import Router
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.state import StatesGroup, State
@@ -18,8 +18,7 @@ router = Router()
 dp.include_router(router)
 
 class PurchasingGift(StatesGroup):
-    name = State()
-    model = State()
+    choosing_gift = State()
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -79,9 +78,8 @@ async def search_callback(callback_query: types.CallbackQuery):
         reply_markup=keyboard.as_markup()
     )
 
-@router.callback_query(lambda c: c.data == "new_request")
-async def selecting_name(callback_query: types.CallbackQuery, state: FSMContext):
-    await state.set_state(PurchasingGift.name)
+@router.callback_query(StateFilter(None), lambda c: c.data == "new_request")
+async def new_request_callback(callback_query: types.CallbackQuery, state: FSMContext):
     async with aiohttp.ClientSession() as session:
         async with session.get(f'http://127.0.0.1:8000/api/gift') as response:
             gifts = await response.json()
@@ -94,36 +92,53 @@ async def selecting_name(callback_query: types.CallbackQuery, state: FSMContext)
                 "Выберите имя подарка",
                 reply_markup=keyboard.as_markup()
             )
+            await state.set_state(PurchasingGift.choosing_gift)
 
+@router.callback_query(lambda c: c.data.startswith("gift_"))
+async def gift_callback(callback_query: types.CallbackQuery, state: FSMContext):
+    await state.update_data(choosen_gift=callback_query.data.split("_")[1])
+    data = callback_query.data  # gift_1 (здесь будет рандомна цифра)
+    splitted_data = data.split('_')  # list -> ["gift", "1"]
+    gift_id = splitted_data[1]  # Айдишник подарка - 1
+    await callback_query.answer(gift_id)
+    async with aiohttp.ClientSession() as session:
+        response = await session.get(f'http://127.0.0.1:8000/api/gift/{gift_id}/')
+        gift = await response.json()  # {'id': 1, 'name': 'Cigar', 'model': 'Hui', 'number': 123}
 
-# @router.callback_query(lambda c: c.data.startswith("gift_"))
-# async def gift_callback(callback_query: types.CallbackQuery):
-#     data = callback_query.data  # gift_1 (здесь будет рандомна цифра)
-#     splitted_data = data.split('_')  # list -> ["gift", "1"]
-#     gift_id = splitted_data[1]  # Айдишник подарка - 1
-#     await callback_query.answer(gift_id)
-#     async with aiohttp.ClientSession() as session:
-#         response = await session.get(f'http://127.0.0.1:8000/api/gift/{gift_id}/')
-#         gift = await response.json()  # {'id': 1, 'name': 'Cigar', 'model': 'Hui', 'number': 123}
-#
-#     keyboard = InlineKeyboardBuilder()
-#     keyboard.row(InlineKeyboardButton(text="Подтвердить", callback_data=f"confirm_{gift_id}"))
-#     keyboard.add(InlineKeyboardButton(text="Отменить", callback_data="cancel_choice"))
-#
-#     await callback_query.message.answer(f"Подтвердите покупку подарка: {gift['model']}",
-#                                            reply_markup=keyboard.as_markup()
-#                                            )
+    keyboard = InlineKeyboardBuilder()
+    keyboard.row(InlineKeyboardButton(text="Подтвердить", callback_data=f"confirm_{gift_id}"))
+    keyboard.add(InlineKeyboardButton(text="Отменить", callback_data="cancel_choice"))
 
+    await callback_query.message.answer(
+        "Подтвердите покупку подарка:\n\n"
+        f"Название подарка: {gift['name']}\n"
+        f"Модель подарка: {gift['model']}\n"
+        f"Номер подарка: {gift['number']}\n",
+        reply_markup=keyboard.as_markup()
+    )
+
+@router.callback_query(lambda c: c.data.startswith("confirm_"))
+async def confirm_callback(callback_query: types.CallbackQuery, state: FSMContext):
+    gift_id = await state.get_data()
+    user_id = callback_query.from_user.id
+
+    async with aiohttp.ClientSession() as session:
+        await session.post(
+            'http://127.0.0.1:8000/api/purchases/',
+            json={
+                "user": user_id,
+                "gift": gift_id['choosen_gift'],
+            }
+        )
+
+    await callback_query.message.edit_text(
+        f"Поздравляем с покупкой подарка!"
+    )
+    await state.clear()
 
 @router.callback_query(lambda c: c.data == "cancel_choice")
 async def cancel_callback(callback_query: types.CallbackQuery):
     await callback_query.message.edit_text("Sosi huy")
-
-
-@router.message(PurchasingGift.name)
-async def saving(message: types.Message, state: FSMContext):
-    await state.update_data(model=message.text)
-    data = await state.get_data()
 
 async def main():
     await dp.start_polling(bot)
